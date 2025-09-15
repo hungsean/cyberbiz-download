@@ -15,6 +15,33 @@ function getLastDayOfMonth(year, month) {
     return new Date(year, month, 0).getDate();
 }
 
+// 點擊導出報告按鈕的函數
+function clickExportReportButton() {
+    try {
+        const exportButton = document.getElementById('export-report');
+
+        if (!exportButton) {
+            throw new Error('找不到 export-report 按鈕');
+        }
+
+        // 模擬點擊事件
+        exportButton.click();
+
+        console.log('已點擊 export-report 按鈕');
+
+        return {
+            success: true,
+            message: '成功點擊導出按鈕'
+        };
+    } catch (error) {
+        console.error('點擊導出按鈕時發生錯誤:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
 // 設定日期範圍的主要函數
 function setDateRange(year, month) {
     try {
@@ -97,9 +124,15 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         const dateResult = setDateRange(request.year, request.month);
 
         if (dateResult.success) {
+            // 設定完日期後，延遲一段時間再自動點擊導出按鈕
+            setTimeout(() => {
+                const exportResult = clickExportReportButton();
+                console.log('自動導出結果:', exportResult);
+            }, 1000); // 延遲 1 秒
+
             sendResponse({
                 success: true,
-                message: `已在 ${window.location.hostname} 設定 ${request.period} 的日期範圍`,
+                message: `已在 ${window.location.hostname} 設定 ${request.period} 的日期範圍並自動點擊導出`,
                 dateRange: {
                     from: dateResult.fromDate,
                     thru: dateResult.thruDate
@@ -111,6 +144,17 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
                 message: `設定日期失敗: ${dateResult.error}`
             });
         }
+    }
+
+    // 處理單獨的導出報告請求
+    if (request.action === 'exportReport') {
+        console.log('執行導出報告');
+        const exportResult = clickExportReportButton();
+
+        sendResponse({
+            success: exportResult.success,
+            message: exportResult.success ? exportResult.message : `導出失敗: ${exportResult.error}`
+        });
     }
 
     // 處理頁面驗證請求
