@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome 擴充功能</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>我的擴充功能</h1>
+        <p class="description">歡迎使用這個 Chrome 擴充功能!</p>
+
+        <div class="button-group">
+            <button id="actionBtn" class="primary-btn">執行動作</button>
+            <button id="getInfoBtn" class="secondary-btn">取得頁面資訊</button>
+        </div>
+
+        <div id="status" class="status-message"></div>
+
+        <div class="info-section">
+            <h3>當前頁面資訊</h3>
+            <div id="pageInfo" class="info-content">
+                <p>點擊上方按鈕以取得資訊</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
