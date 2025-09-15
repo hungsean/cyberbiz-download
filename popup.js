@@ -46,14 +46,72 @@ document.addEventListener('DOMContentLoaded', function() {
 
         showStatus(`準備下載 ${lastMonth.displayName} 的資料...`, 'processing');
 
-        setTimeout(() => {
-            console.log(`執行上個月 (${lastMonth.displayName}) 的下載邏輯`);
-            console.log('年份:', lastMonth.year);
-            console.log('月份:', lastMonth.month);
-            console.log('格式化月份:', lastMonth.monthStr);
+        try {
+            // 獲取當前活動分頁
+            const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+            const currentUrl = new URL(tab.url);
 
-            showStatus(`${lastMonth.displayName} 資料處理完成！`, 'success');
-        }, 1000);
+            // 檢查路徑是否正確
+            const targetPath = '/admin/orders/reportion'; // 修改為您需要的路徑
+
+            if (currentUrl.pathname !== targetPath) {
+                console.log('路徑不匹配，當前路徑:', currentUrl.pathname, '目標路徑:', targetPath);
+                showStatus('跳轉到正確頁面...', 'processing');
+
+                // 透過 background script 跳轉到目標路徑，並設定待執行任務
+                const targetUrl = `${currentUrl.origin}/admin/orders/reportion`;
+                const pendingTask = {
+                    action: 'downloadData',
+                    period: lastMonth.displayName,
+                    year: lastMonth.year,
+                    month: lastMonth.month
+                };
+
+                const response = await chrome.runtime.sendMessage({
+                    action: 'navigateToPage',
+                    targetUrl: targetUrl,
+                    pendingTask: pendingTask
+                });
+
+                if (response.success) {
+                    showStatus('頁面切換完成，正在等待頁面載入...', 'processing');
+
+                    // 等待頁面準備完成
+                    const readyResponse = await chrome.runtime.sendMessage({
+                        action: 'waitForPageReady',
+                        maxRetries: 15
+                    });
+
+                    if (readyResponse.success) {
+                        showStatus('自動執行完成！', 'success');
+                    } else {
+                        showStatus('頁面載入超時，請手動執行', 'error');
+                    }
+                }
+                return; // 跳轉情況下，不繼續執行下面的程式碼
+            }
+
+            console.log('路徑正確，直接執行下載');
+            const response = await chrome.tabs.sendMessage(tab.id, {
+                action: 'downloadData',
+                period: lastMonth.displayName,
+                year: lastMonth.year,
+                month: lastMonth.month
+            });
+
+            if (response.success) {
+                const message = response.dateRange
+                    ? `${lastMonth.displayName} 日期已設定 (${response.dateRange.from} 到 ${response.dateRange.thru})`
+                    : `${lastMonth.displayName} 資料處理完成！`;
+                showStatus(message, 'success');
+            } else {
+                showStatus(response.message || '執行失敗', 'error');
+            }
+
+        } catch (error) {
+            console.error('執行錯誤:', error);
+            showStatus('執行失敗，請重試', 'error');
+        }
     });
 
     thisMonthBtn.addEventListener('click', async () => {
