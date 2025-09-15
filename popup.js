@@ -74,30 +74,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('路徑不匹配，當前路徑:', currentUrl.pathname, '目標路徑:', targetPath);
                 showStatus('跳轉到正確頁面...', 'processing');
 
-                // 跳轉到目標路徑，保留原domain
+                // 透過 background script 跳轉到目標路徑
                 const targetUrl = `${currentUrl.origin}/admin/orders/reportion`;
-                await chrome.tabs.update(tab.id, {url: targetUrl});
-
-                // 等待頁面載入後執行下載邏輯
-                setTimeout(() => {
-                    chrome.tabs.sendMessage(tab.id, {
-                        action: 'downloadData',
-                        period: thisMonth.displayName,
-                        year: thisMonth.year,
-                        month: thisMonth.month
-                    });
-                    showStatus(`${thisMonth.displayName} 資料處理完成！`, 'success');
-                }, 2000);
-            } else {
-                console.log('路徑正確，直接執行下載');
-                chrome.tabs.sendMessage(tab.id, {
-                    action: 'downloadData',
-                    period: thisMonth.displayName,
-                    year: thisMonth.year,
-                    month: thisMonth.month
+                const response = await chrome.runtime.sendMessage({
+                    action: 'navigateToPage',
+                    targetUrl: targetUrl
                 });
-                showStatus(`${thisMonth.displayName} 資料處理完成！`, 'success');
+
+                if (response.success) {
+                    showStatus('頁面切換完成，請手動執行下載', 'success');
+                }
             }
+            console.log('路徑正確，直接執行下載');
+            chrome.tabs.sendMessage(tab.id, {
+                action: 'downloadData',
+                period: thisMonth.displayName,
+                year: thisMonth.year,
+                month: thisMonth.month
+            });
+            showStatus(`${thisMonth.displayName} 資料處理完成！`, 'success');
+            
         } catch (error) {
             console.error('執行錯誤:', error);
             showStatus('執行失敗，請重試', 'error');
