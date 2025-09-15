@@ -15,6 +15,37 @@ function getLastDayOfMonth(year, month) {
     return new Date(year, month, 0).getDate();
 }
 
+// 點擊確認 checkbox 的函數
+function clickReadAndConfirmCheckbox() {
+    try {
+        const checkbox = document.getElementById('read_and_confirm');
+
+        if (!checkbox) {
+            throw new Error('找不到 read_and_confirm checkbox');
+        }
+
+        // 如果 checkbox 尚未被勾選，則點擊它
+        if (!checkbox.checked) {
+            checkbox.click();
+            console.log('已勾選 read_and_confirm checkbox');
+        } else {
+            console.log('read_and_confirm checkbox 已經被勾選');
+        }
+
+        return {
+            success: true,
+            message: 'checkbox 操作完成',
+            wasChecked: checkbox.checked
+        };
+    } catch (error) {
+        console.error('點擊 checkbox 時發生錯誤:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
 // 點擊導出報告按鈕的函數
 function clickExportReportButton() {
     try {
@@ -124,15 +155,22 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         const dateResult = setDateRange(request.year, request.month);
 
         if (dateResult.success) {
-            // 設定完日期後，延遲一段時間再自動點擊導出按鈕
+            // 設定完日期後，執行完整的自動化流程
             setTimeout(() => {
+                // 先點擊導出按鈕
                 const exportResult = clickExportReportButton();
                 console.log('自動導出結果:', exportResult);
+
+                // 再延遲一點時間點擊確認 checkbox
+                setTimeout(() => {
+                    const checkboxResult = clickReadAndConfirmCheckbox();
+                    console.log('自動勾選 checkbox 結果:', checkboxResult);
+                }, 1000); // 再延遲 1 秒
             }, 1000); // 延遲 1 秒
 
             sendResponse({
                 success: true,
-                message: `已在 ${window.location.hostname} 設定 ${request.period} 的日期範圍並自動點擊導出`,
+                message: `已在 ${window.location.hostname} 設定 ${request.period} 的日期範圍並自動執行導出與確認`,
                 dateRange: {
                     from: dateResult.fromDate,
                     thru: dateResult.thruDate
