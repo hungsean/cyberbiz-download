@@ -86,13 +86,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             console.log('路徑正確，直接執行下載');
-            chrome.tabs.sendMessage(tab.id, {
+            const response = await chrome.tabs.sendMessage(tab.id, {
                 action: 'downloadData',
                 period: thisMonth.displayName,
                 year: thisMonth.year,
                 month: thisMonth.month
             });
-            showStatus(`${thisMonth.displayName} 資料處理完成！`, 'success');
+
+            if (response.success) {
+                const message = response.dateRange
+                    ? `${thisMonth.displayName} 日期已設定 (${response.dateRange.from} 到 ${response.dateRange.thru})`
+                    : `${thisMonth.displayName} 資料處理完成！`;
+                showStatus(message, 'success');
+            } else {
+                showStatus(response.message || '執行失敗', 'error');
+            }
             
         } catch (error) {
             console.error('執行錯誤:', error);
