@@ -73,6 +73,43 @@ function clickExportReportButton() {
     }
 }
 
+// 點擊"我同意"確認按鈕的函數
+function clickAgreeButton() {
+    try {
+        // 尋找所有 class="confirm" 的按鈕
+        const confirmButtons = document.querySelectorAll('.confirm');
+        let targetButton = null;
+
+        // 遍歷找到內容是"我同意"的按鈕
+        for (const button of confirmButtons) {
+            if (button.textContent.trim() === '我同意') {
+                targetButton = button;
+                break;
+            }
+        }
+
+        if (!targetButton) {
+            throw new Error('找不到內容為"我同意"的 confirm 按鈕');
+        }
+
+        // 模擬點擊事件
+        targetButton.click();
+
+        console.log('已點擊"我同意"按鈕');
+
+        return {
+            success: true,
+            message: '成功點擊"我同意"按鈕'
+        };
+    } catch (error) {
+        console.error('點擊"我同意"按鈕時發生錯誤:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
 // 設定日期範圍的主要函數
 function setDateRange(year, month) {
     try {
@@ -165,12 +202,18 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
                 setTimeout(() => {
                     const checkboxResult = clickReadAndConfirmCheckbox();
                     console.log('自動勾選 checkbox 結果:', checkboxResult);
+
+                    // 最後點擊"我同意"按鈕
+                    setTimeout(() => {
+                        const agreeResult = clickAgreeButton();
+                        console.log('自動點擊"我同意"按鈕結果:', agreeResult);
+                    }, 500); // 再延遲 0.5 秒
                 }, 1000); // 再延遲 1 秒
             }, 1000); // 延遲 1 秒
 
             sendResponse({
                 success: true,
-                message: `已在 ${window.location.hostname} 設定 ${request.period} 的日期範圍並自動執行導出與確認`,
+                message: `已在 ${window.location.hostname} 設定 ${request.period} 的日期範圍並自動執行完整流程`,
                 dateRange: {
                     from: dateResult.fromDate,
                     thru: dateResult.thruDate
