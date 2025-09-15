@@ -5,7 +5,9 @@
   "description": "一個基礎的 Chrome 擴充功能",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "webNavigation",
+    "tabs"
   ],
   "host_permissions": [
     "https://*/*",

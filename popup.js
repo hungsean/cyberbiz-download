@@ -74,17 +74,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('路徑不匹配，當前路徑:', currentUrl.pathname, '目標路徑:', targetPath);
                 showStatus('跳轉到正確頁面...', 'processing');
 
-                // 透過 background script 跳轉到目標路徑
+                // 透過 background script 跳轉到目標路徑，並設定待執行任務
                 const targetUrl = `${currentUrl.origin}/admin/orders/reportion`;
+                const pendingTask = {
+                    action: 'downloadData',
+                    period: thisMonth.displayName,
+                    year: thisMonth.year,
+                    month: thisMonth.month
+                };
+
                 const response = await chrome.runtime.sendMessage({
                     action: 'navigateToPage',
-                    targetUrl: targetUrl
+                    targetUrl: targetUrl,
+                    pendingTask: pendingTask
                 });
 
                 if (response.success) {
-                    showStatus('頁面切換完成，請手動執行下載', 'success');
+                    showStatus('頁面切換完成，正在等待頁面載入...', 'processing');
+
+                    // 等待頁面準備完成
+                    const readyResponse = await chrome.runtime.sendMessage({
+                        action: 'waitForPageReady',
+                        maxRetries: 15
+                    });
+
+                    if (readyResponse.success) {
+                        showStatus('自動執行完成！', 'success');
+                    } else {
+                        showStatus('頁面載入超時，請手動執行', 'error');
+                    }
                 }
+                return; // 跳轉情況下，不繼續執行下面的程式碼
             }
+
             console.log('路徑正確，直接執行下載');
             const response = await chrome.tabs.sendMessage(tab.id, {
                 action: 'downloadData',
