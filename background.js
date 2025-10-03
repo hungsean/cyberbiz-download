@@ -127,6 +127,48 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         return true; // 保持訊息通道開啟以進行非同步回應
     }
+
+    // 訂單匯出任務的統一處理
+    if (request.action === 'orderExportTask') {
+        console.log('收到訂單匯出任務:', request);
+
+        chrome.tabs.query({active: true, currentWindow: true}, async (tabs) => {
+            const tab = tabs[0];
+            const currentUrl = new URL(tab.url);
+
+            try {
+                // 檢查路徑是否正確
+                if (currentUrl.pathname !== request.targetPath) {
+                    console.log('路徑不匹配，需要跳轉');
+
+                    // 儲存待執行任務
+                    const pendingTask = {
+                        action: 'orderExportTask',
+                        startDate: request.startDate,
+                        endDate: request.endDate
+                    };
+                    pendingTasks.set(tab.id, pendingTask);
+
+                    // 執行跳轉
+                    const targetUrl = `${currentUrl.origin}${request.targetPath}`;
+                    chrome.tabs.update(tab.id, {url: targetUrl});
+
+                    sendResponse({success: true, message: '頁面跳轉中，將自動執行'});
+                } else {
+                    console.log('路徑正確，直接執行訂單匯出');
+
+                    // 執行完整的訂單匯出流程
+                    const result = await executeOrderExport(tab.id, request.startDate, request.endDate);
+                    sendResponse(result);
+                }
+            } catch (error) {
+                console.error('訂單匯出任務執行錯誤:', error);
+                sendResponse({success: false, message: `執行失敗: ${error.message}`});
+            }
+        });
+
+        return true; // 保持訊息通道開啟以進行非同步回應
+    }
 });
 
 // 執行截取流量的完整流程
@@ -250,6 +292,108 @@ async function executeCaptureTraffic(tabId, startDate, endDate) {
     }
 }
 
+// 執行訂單匯出的完整流程
+async function executeOrderExport(tabId, startDate, endDate) {
+    try {
+        console.log('開始執行訂單匯出流程');
+
+        // 1. 等待 loading
+        console.log('步驟 1: 等待 loading 消失');
+        const loadingResponse1 = await chrome.tabs.sendMessage(tabId, {
+            action: 'waitForLoading'
+        });
+        if (!loadingResponse1.success) {
+            return {success: false, message: '等待 loading 失敗'};
+        }
+
+        // 2. 設定日期範圍
+        console.log('步驟 2: 設定日期範圍');
+        const dateResponse = await chrome.tabs.sendMessage(tabId, {
+            action: 'setOrderDateRange',
+            startDate: startDate,
+            endDate: endDate
+        });
+        if (!dateResponse.success) {
+            return {success: false, message: `設定日期失敗: ${dateResponse.message}`};
+        }
+
+        // 3. 點擊導出按鈕
+        console.log('步驟 3: 點擊導出按鈕');
+        const exportResponse = await chrome.tabs.sendMessage(tabId, {
+            action: 'clickExportButton'
+        });
+        if (!exportResponse.success) {
+            return {success: false, message: `點擊導出按鈕失敗: ${exportResponse.message}`};
+        }
+
+        // 4. 等待彈窗並勾選 checkbox
+        console.log('步驟 4: 勾選確認 checkbox');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const checkboxResponse = await chrome.tabs.sendMessage(tabId, {
+            action: 'clickCheckbox'
+        });
+        if (!checkboxResponse.success) {
+            return {success: false, message: `勾選 checkbox 失敗: ${checkboxResponse.message}`};
+        }
+
+        // 5. 點擊我同意按鈕
+        console.log('步驟 5: 點擊我同意按鈕');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const agreeResponse = await chrome.tabs.sendMessage(tabId, {
+            action: 'clickAgreeButton'
+        });
+        if (!agreeResponse.success) {
+            return {success: false, message: `點擊我同意按鈕失敗: ${agreeResponse.message}`};
+        }
+
+        console.log('訂單匯出流程完成');
+
+        // 儲存結果到 storage，供 popup 顯示
+        const result = {
+            success: true,
+            message: `訂單匯出成功！`,
+            messageType: 'success',
+            details: `日期範圍: ${startDate} ~ ${endDate}\n檔案已下載`,
+            timestamp: new Date().toISOString()
+        };
+
+        await chrome.storage.local.set({ lastTaskResult: result });
+
+        // 嘗試打開 popup 顯示結果
+        try {
+            await chrome.action.openPopup();
+            console.log('Popup 已打開');
+        } catch (error) {
+            console.log('無法打開 popup:', error.message);
+        }
+
+        return result;
+
+    } catch (error) {
+        console.error('執行訂單匯出流程時發生錯誤:', error);
+
+        // 儲存錯誤結果
+        const errorResult = {
+            success: false,
+            message: `執行失敗: ${error.message}`,
+            messageType: 'error',
+            details: error.stack || error.message,
+            timestamp: new Date().toISOString()
+        };
+
+        await chrome.storage.local.set({ lastTaskResult: errorResult });
+
+        // 嘗試打開 popup 顯示錯誤
+        try {
+            await chrome.action.openPopup();
+        } catch (openError) {
+            console.log('無法打開 popup:', openError.message);
+        }
+
+        return errorResult;
+    }
+}
+
 // 監聽頁面載入完成事件
 chrome.webNavigation.onCompleted.addListener((details) => {
     // 只處理主頁面，不是 iframe
@@ -269,6 +413,11 @@ chrome.webNavigation.onCompleted.addListener((details) => {
                         // 截取流量任務
                         console.log('執行截取流量任務');
                         await executeCaptureTraffic(details.tabId, pendingTask.startDate, pendingTask.endDate);
+                        pendingTasks.delete(details.tabId);
+                    } else if (pendingTask.action === 'orderExportTask') {
+                        // 訂單匯出任務
+                        console.log('執行訂單匯出任務');
+                        await executeOrderExport(details.tabId, pendingTask.startDate, pendingTask.endDate);
                         pendingTasks.delete(details.tabId);
                     } else {
                         // 其他任務（如 downloadData）

@@ -228,6 +228,87 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         return true; // 保持訊息通道開啟以進行非同步回應
     }
 
+    // 設定訂單匯出的日期範圍
+    if (request.action === 'setOrderDateRange') {
+        console.log('設定訂單日期範圍:', request.startDate, '到', request.endDate);
+
+        try {
+            // 尋找日期選擇器元素
+            const fromDateInput = document.getElementById('from_date');
+            const thruDateInput = document.getElementById('thru_date');
+
+            if (!fromDateInput || !thruDateInput) {
+                sendResponse({
+                    success: false,
+                    message: '找不到日期輸入欄位'
+                });
+                return;
+            }
+
+            // 將 yyyy-mm-dd 格式轉換為 yyyy-mm-dd hh:mm:ss 格式
+            const startDateTime = `${request.startDate} 00:00:00`;
+            const endDateTime = `${request.endDate} 23:59:59`;
+
+            // 設定日期值
+            fromDateInput.value = startDateTime;
+            thruDateInput.value = endDateTime;
+
+            // 觸發事件
+            const changeEvent = new Event('change', { bubbles: true });
+            const inputEvent = new Event('input', { bubbles: true });
+            fromDateInput.dispatchEvent(changeEvent);
+            fromDateInput.dispatchEvent(inputEvent);
+            thruDateInput.dispatchEvent(changeEvent);
+            thruDateInput.dispatchEvent(inputEvent);
+
+            console.log(`已設定日期範圍: ${startDateTime} 到 ${endDateTime}`);
+
+            sendResponse({
+                success: true,
+                message: '日期範圍設定成功',
+                startDate: startDateTime,
+                endDate: endDateTime
+            });
+        } catch (error) {
+            console.error('設定日期範圍時發生錯誤:', error);
+            sendResponse({
+                success: false,
+                message: `設定日期失敗: ${error.message}`
+            });
+        }
+    }
+
+    // 點擊導出按鈕
+    if (request.action === 'clickExportButton') {
+        console.log('執行點擊導出按鈕');
+        const exportResult = clickExportReportButton();
+        sendResponse({
+            success: exportResult.success,
+            message: exportResult.success ? exportResult.message : `導出失敗: ${exportResult.error}`
+        });
+    }
+
+    // 點擊確認 checkbox
+    if (request.action === 'clickCheckbox') {
+        console.log('執行勾選 checkbox');
+        const checkboxResult = clickReadAndConfirmCheckbox();
+        sendResponse({
+            success: checkboxResult.success,
+            message: checkboxResult.success ? checkboxResult.message : `勾選失敗: ${checkboxResult.error}`
+        });
+    }
+
+    // 點擊我同意按鈕
+    if (request.action === 'clickAgreeButton') {
+        console.log('執行點擊我同意按鈕');
+        const agreeResult = clickAgreeButton();
+        sendResponse({
+            success: agreeResult.success,
+            message: agreeResult.success ? agreeResult.message : `點擊失敗: ${agreeResult.error}`
+        });
+    }
+
+    // 舊的 downloadData action（保留以兼容舊版本）
     if (request.action === 'downloadData') {
         console.log('在頁面中執行資料下載:', request.period);
 
@@ -280,17 +361,6 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
                 message: `設定日期失敗: ${dateResult.error}`
             });
         }
-    }
-
-    // 處理單獨的導出報告請求
-    if (request.action === 'exportReport') {
-        console.log('執行導出報告');
-        const exportResult = clickExportReportButton();
-
-        sendResponse({
-            success: exportResult.success,
-            message: exportResult.success ? exportResult.message : `導出失敗: ${exportResult.error}`
-        });
     }
 
     // 處理頁面驗證請求
