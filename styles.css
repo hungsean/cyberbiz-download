@@ -109,3 +109,63 @@ h1 {
 .container {
     animation: fadeIn 0.3s ease;
 }
+
+.webhook-section {
+    margin-top: 25px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+.webhook-section label {
+    display: block;
+    color: white;
+    font-size: 13px;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.webhook-section input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    font-size: 13px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #333;
+    margin-bottom: 10px;
+    transition: border-color 0.3s ease;
+}
+
+.webhook-section input:focus {
+    outline: none;
+    border-color: white;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+}
+
+.webhook-section input::placeholder {
+    color: #999;
+}
+
+.secondary-btn {
+    width: 100%;
+    padding: 10px 20px;
+    border: 2px solid white;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: transparent;
+    color: white;
+}
+
+.secondary-btn:hover {
+    background: white;
+    color: #667eea;
+    transform: translateY(-1px);
+}
+
+.secondary-btn:active {
+    transform: translateY(0);
+}

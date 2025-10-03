@@ -170,8 +170,63 @@ function validateDatePickers() {
     };
 }
 
+// 等待 loading 消失的函數
+function waitForLoadingToDisappear(timeout = 30000) {
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+
+        const checkLoading = () => {
+            const loadingElement = document.querySelector('.loading-block');
+
+            // 如果找不到 loading 元素,或元素已隱藏
+            if (!loadingElement ||
+                loadingElement.style.display === 'none' ||
+                !loadingElement.offsetParent) {
+                console.log('Loading 已消失');
+                resolve(true);
+                return;
+            }
+
+            // 檢查是否超時
+            if (Date.now() - startTime > timeout) {
+                console.error('等待 loading 消失超時');
+                reject(new Error('等待 loading 消失超時'));
+                return;
+            }
+
+            // 繼續檢查 (每 200ms 檢查一次)
+            setTimeout(checkLoading, 200);
+        };
+
+        checkLoading();
+    });
+}
+
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     console.log('內容腳本收到訊息:', request);
+
+    // 處理等待 loading 的請求
+    if (request.action === 'waitForLoading') {
+        console.log('檢查並等待 loading 消失');
+
+        (async () => {
+            try {
+                await waitForLoadingToDisappear();
+                sendResponse({
+                    success: true,
+                    message: 'Loading 已消失或不存在'
+                });
+            } catch (error) {
+                console.error('等待 loading 時發生錯誤:', error);
+                sendResponse({
+                    success: false,
+                    message: `等待失敗: ${error.message}`
+                });
+            }
+        })();
+
+        return true; // 保持訊息通道開啟以進行非同步回應
+    }
 
     if (request.action === 'downloadData') {
         console.log('在頁面中執行資料下載:', request.period);
@@ -242,5 +297,146 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     if (request.action === 'validatePage') {
         const validation = validateDatePickers();
         sendResponse(validation);
+    }
+
+    // 處理設定日期範圍請求（用於截取流量功能）
+    if (request.action === 'setDateRange') {
+        console.log('設定日期範圍:', request.startDate, '到', request.endDate);
+
+        (async () => {
+            try {
+                // 尋找 class="DateInput_input_1" 的輸入框
+                const dateInputs = document.querySelectorAll('.DateInput_input_1');
+
+                if (dateInputs.length < 2) {
+                    sendResponse({
+                        success: false,
+                        message: `找不到足夠的日期輸入框（找到 ${dateInputs.length} 個，需要 2 個）`
+                    });
+                    return;
+                }
+
+                // 第一個是開始時間，第二個是結束時間
+                const startInput = dateInputs[0];
+                const endInput = dateInputs[1];
+
+                // 先 focus 並設定開始時間
+                startInput.focus();
+                startInput.value = request.startDate;
+
+                // 觸發開始時間的事件
+                const startChangeEvent = new Event('change', { bubbles: true });
+                const startInputEvent = new Event('input', { bubbles: true });
+                startInput.dispatchEvent(startChangeEvent);
+                startInput.dispatchEvent(startInputEvent);
+
+                // 再 focus 並設定結束時間
+                endInput.focus();
+                endInput.value = request.endDate;
+
+                // 觸發結束時間的事件
+                const endChangeEvent = new Event('change', { bubbles: true });
+                const endInputEvent = new Event('input', { bubbles: true });
+                endInput.dispatchEvent(endChangeEvent);
+                endInput.dispatchEvent(endInputEvent);
+
+                console.log(`日期範圍已設定: ${request.startDate} 到 ${request.endDate}`);
+
+                // 等待 loading 消失
+                console.log('等待 loading 消失...');
+                await waitForLoadingToDisappear();
+
+                sendResponse({
+                    success: true,
+                    message: '日期範圍設定成功且資料已載入',
+                    startDate: request.startDate,
+                    endDate: request.endDate
+                });
+            } catch (error) {
+                console.error('設定日期範圍時發生錯誤:', error);
+                sendResponse({
+                    success: false,
+                    message: `設定日期失敗: ${error.message}`
+                });
+            }
+        })();
+
+        return true; // 保持訊息通道開啟以進行非同步回應
+    }
+
+    // 處理抓取網站數據請求
+    if (request.action === 'captureTableData') {
+        console.log('開始抓取表格數據');
+
+        try {
+            // 尋找 div.pitaya-table-2 下的 table
+            const tableContainer = document.querySelector('.pitaya-table-2');
+
+            if (!tableContainer) {
+                sendResponse({
+                    success: false,
+                    message: '找不到 .pitaya-table-2 容器'
+                });
+                return;
+            }
+
+            const table = tableContainer.querySelector('table');
+
+            if (!table) {
+                sendResponse({
+                    success: false,
+                    message: '在 .pitaya-table-2 中找不到 table 元素'
+                });
+                return;
+            }
+
+            // 解析表格為 JSON
+            const headers = [];
+            const rows = [];
+
+            // 取得表頭
+            const headerCells = table.querySelectorAll('thead th');
+            headerCells.forEach(cell => {
+                headers.push(cell.textContent.trim());
+            });
+
+            // 取得資料列
+            const bodyRows = table.querySelectorAll('tbody tr');
+            bodyRows.forEach(row => {
+                const rowData = {};
+                const cells = row.querySelectorAll('td');
+
+                cells.forEach((cell, index) => {
+                    if (index < headers.length) {
+                        rowData[headers[index]] = cell.textContent.trim();
+                    }
+                });
+
+                rows.push(rowData);
+            });
+
+            const tableData = {
+                headers: headers,
+                rows: rows,
+                totalRows: rows.length,
+                capturedAt: new Date().toISOString(),
+                url: window.location.href
+            };
+
+            console.log('表格數據抓取成功:', tableData);
+
+            sendResponse({
+                success: true,
+                data: tableData,
+                message: `成功抓取 ${rows.length} 筆資料`
+            });
+
+        } catch (error) {
+            console.error('抓取表格數據時發生錯誤:', error);
+            sendResponse({
+                success: false,
+                message: `抓取失敗: ${error.message}`
+            });
+        }
     }
 });
