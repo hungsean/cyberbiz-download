@@ -2,6 +2,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const lastMonthBtn = document.getElementById('lastMonthBtn');
     const thisMonthBtn = document.getElementById('thisMonthBtn');
     const statusDiv = document.getElementById('status');
+    const webhookUrlInput = document.getElementById('webhookUrl');
+    const saveWebhookBtn = document.getElementById('saveWebhookBtn');
+
+    // 載入已保存的 webhook URL
+    chrome.storage.sync.get(['webhookUrl'], function(result) {
+        if (result.webhookUrl) {
+            webhookUrlInput.value = result.webhookUrl;
+        }
+    });
 
     function getLastMonth() {
         const now = new Date();
@@ -186,5 +195,28 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('執行錯誤:', error);
             showStatus('執行失敗，請重試', 'error');
         }
+    });
+
+    // 保存 webhook URL
+    saveWebhookBtn.addEventListener('click', function() {
+        const webhookUrl = webhookUrlInput.value.trim();
+
+        if (!webhookUrl) {
+            showStatus('請輸入 webhook URL', 'error');
+            return;
+        }
+
+        // 驗證 URL 格式
+        try {
+            new URL(webhookUrl);
+        } catch (e) {
+            showStatus('請輸入有效的 URL', 'error');
+            return;
+        }
+
+        // 保存到 Chrome storage
+        chrome.storage.sync.set({ webhookUrl: webhookUrl }, function() {
+            showStatus('Webhook URL 已保存！', 'success');
+        });
     });
 });
