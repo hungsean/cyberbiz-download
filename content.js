@@ -170,6 +170,38 @@ function validateDatePickers() {
     };
 }
 
+// 等待 loading 消失的函數
+function waitForLoadingToDisappear(timeout = 30000) {
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+
+        const checkLoading = () => {
+            const loadingElement = document.querySelector('.loading-block');
+
+            // 如果找不到 loading 元素,或元素已隱藏
+            if (!loadingElement ||
+                loadingElement.style.display === 'none' ||
+                !loadingElement.offsetParent) {
+                console.log('Loading 已消失');
+                resolve(true);
+                return;
+            }
+
+            // 檢查是否超時
+            if (Date.now() - startTime > timeout) {
+                console.error('等待 loading 消失超時');
+                reject(new Error('等待 loading 消失超時'));
+                return;
+            }
+
+            // 繼續檢查 (每 200ms 檢查一次)
+            setTimeout(checkLoading, 200);
+        };
+
+        checkLoading();
+    });
+}
+
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     console.log('內容腳本收到訊息:', request);
 
@@ -248,48 +280,64 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     if (request.action === 'setDateRange') {
         console.log('設定日期範圍:', request.startDate, '到', request.endDate);
 
-        try {
-            // 尋找 class="DateInput_input_1" 的輸入框
-            const dateInputs = document.querySelectorAll('.DateInput_input_1');
+        (async () => {
+            try {
+                // 尋找 class="DateInput_input_1" 的輸入框
+                const dateInputs = document.querySelectorAll('.DateInput_input_1');
 
-            if (dateInputs.length < 2) {
+                if (dateInputs.length < 2) {
+                    sendResponse({
+                        success: false,
+                        message: `找不到足夠的日期輸入框（找到 ${dateInputs.length} 個，需要 2 個）`
+                    });
+                    return;
+                }
+
+                // 第一個是開始時間，第二個是結束時間
+                const startInput = dateInputs[0];
+                const endInput = dateInputs[1];
+
+                // 先 focus 並設定開始時間
+                startInput.focus();
+                startInput.value = request.startDate;
+
+                // 觸發開始時間的事件
+                const startChangeEvent = new Event('change', { bubbles: true });
+                const startInputEvent = new Event('input', { bubbles: true });
+                startInput.dispatchEvent(startChangeEvent);
+                startInput.dispatchEvent(startInputEvent);
+
+                // 再 focus 並設定結束時間
+                endInput.focus();
+                endInput.value = request.endDate;
+
+                // 觸發結束時間的事件
+                const endChangeEvent = new Event('change', { bubbles: true });
+                const endInputEvent = new Event('input', { bubbles: true });
+                endInput.dispatchEvent(endChangeEvent);
+                endInput.dispatchEvent(endInputEvent);
+
+                console.log(`日期範圍已設定: ${request.startDate} 到 ${request.endDate}`);
+
+                // 等待 loading 消失
+                console.log('等待 loading 消失...');
+                await waitForLoadingToDisappear();
+
+                sendResponse({
+                    success: true,
+                    message: '日期範圍設定成功且資料已載入',
+                    startDate: request.startDate,
+                    endDate: request.endDate
+                });
+            } catch (error) {
+                console.error('設定日期範圍時發生錯誤:', error);
                 sendResponse({
                     success: false,
-                    message: `找不到足夠的日期輸入框（找到 ${dateInputs.length} 個，需要 2 個）`
+                    message: `設定日期失敗: ${error.message}`
                 });
-                return;
             }
+        })();
 
-            // 第一個是開始時間，第二個是結束時間
-            const startInput = dateInputs[0];
-            const endInput = dateInputs[1];
-
-            // 設定值
-            startInput.value = request.startDate;
-            endInput.value = request.endDate;
-
-            // 觸發事件以確保頁面識別到變更
-            [startInput, endInput].forEach(input => {
-                const changeEvent = new Event('change', { bubbles: true });
-                const inputEvent = new Event('input', { bubbles: true });
-                input.dispatchEvent(changeEvent);
-                input.dispatchEvent(inputEvent);
-            });
-
-            console.log(`日期範圍已設定: ${request.startDate} 到 ${request.endDate}`);
-
-            sendResponse({
-                success: true,
-                message: '日期範圍設定成功',
-                startDate: request.startDate,
-                endDate: request.endDate
-            });
-        } catch (error) {
-            console.error('設定日期範圍時發生錯誤:', error);
-            sendResponse({
-                success: false,
-                message: `設定日期失敗: ${error.message}`
-            });
-        }
+        return true; // 保持訊息通道開啟以進行非同步回應
     }
 });

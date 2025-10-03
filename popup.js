@@ -249,6 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     endDate: dateRange.endDate
                 });
 
+                console.log('Content script 回應:', response);
                 return response;
             } catch (error) {
                 // 如果連接失敗，嘗試注入 content script
@@ -311,7 +312,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            showStatus('日期設定完成，正在發送測試訊息...', 'processing');
+            console.log('日期設定成功:', dateResponse.dateRange);
+            showStatus('資料載入完成，正在發送測試訊息...', 'processing');
 
             // 3-3. 保留測試用的發送 webhook 請求
             const webhookResponse = await chrome.runtime.sendMessage({
