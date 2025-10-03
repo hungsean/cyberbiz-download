@@ -199,15 +199,54 @@ async function executeCaptureTraffic(tabId, startDate, endDate) {
         }
 
         console.log('截取流量流程完成');
-        return {
+
+        // 儲存結果到 storage，供 popup 顯示
+        const result = {
             success: true,
             totalRows: filteredRows.length,
-            message: '截取流量完成'
+            originalRows: allRows.length,
+            dateRange: {startDate, endDate},
+            message: `成功發送 ${filteredRows.length} 筆資料！`,
+            messageType: 'success',
+            details: `原始資料: ${allRows.length} 筆\n過濾後資料: ${filteredRows.length} 筆\n日期範圍: ${startDate} ~ ${endDate}`,
+            timestamp: new Date().toISOString()
         };
+
+        await chrome.storage.local.set({ lastTaskResult: result });
+
+        // 嘗試打開 popup 顯示結果
+        try {
+            await chrome.action.openPopup();
+            console.log('Popup 已打開');
+        } catch (error) {
+            console.log('無法打開 popup:', error.message);
+            // 如果無法打開 popup（例如在某些情況下），結果仍然已儲存
+        }
+
+        return result;
 
     } catch (error) {
         console.error('執行截取流量流程時發生錯誤:', error);
-        return {success: false, message: `執行失敗: ${error.message}`};
+
+        // 儲存錯誤結果
+        const errorResult = {
+            success: false,
+            message: `執行失敗: ${error.message}`,
+            messageType: 'error',
+            details: error.stack || error.message,
+            timestamp: new Date().toISOString()
+        };
+
+        await chrome.storage.local.set({ lastTaskResult: errorResult });
+
+        // 嘗試打開 popup 顯示錯誤
+        try {
+            await chrome.action.openPopup();
+        } catch (openError) {
+            console.log('無法打開 popup:', openError.message);
+        }
+
+        return errorResult;
     }
 }
 

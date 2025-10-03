@@ -12,6 +12,28 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // 檢查是否有待顯示的任務結果
+    chrome.storage.local.get(['lastTaskResult'], function(result) {
+        if (result.lastTaskResult) {
+            const taskResult = result.lastTaskResult;
+            console.log('發現待顯示的任務結果:', taskResult);
+
+            // 由 background 完全控制顯示內容
+            const message = taskResult.message || (taskResult.success ? '執行成功' : '執行失敗');
+            const messageType = taskResult.messageType || (taskResult.success ? 'success' : 'error');
+
+            showStatus(message, messageType);
+
+            // 如果有詳細資訊,可以記錄到 console
+            if (taskResult.details) {
+                console.log('任務詳細資訊:', taskResult.details);
+            }
+
+            // 清除已顯示的結果
+            chrome.storage.local.remove(['lastTaskResult']);
+        }
+    });
+
     function getLastMonth() {
         const now = new Date();
         const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
