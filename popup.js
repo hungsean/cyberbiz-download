@@ -326,16 +326,37 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             console.log('抓取到的數據:', captureResponse.data);
-            showStatus('數據抓取成功，正在發送到 webhook...', 'processing');
+            showStatus('數據抓取成功，正在過濾資料...', 'processing');
+
+            // 3-3.5. 過濾資料：只保留在當前月份範圍內的資料
+            const dateRange = getMonthDateRange(lastMonth.year, lastMonth.month);
+            const filteredRows = captureResponse.data.rows.filter(row => {
+                const rowDate = row['日期']; // 假設欄位名稱為「日期」
+                if (!rowDate) return false;
+
+                // 將日期字串轉為可比較的格式 (假設格式為 yyyy-mm-dd 或類似)
+                return rowDate >= dateRange.startDate && rowDate <= dateRange.endDate;
+            });
+
+            const filteredData = {
+                ...captureResponse.data,
+                rows: filteredRows,
+                totalRows: filteredRows.length,
+                originalTotalRows: captureResponse.data.totalRows,
+                dateRange: dateRange
+            };
+
+            console.log(`過濾完成：原始 ${captureResponse.data.totalRows} 筆，過濾後 ${filteredRows.length} 筆`);
+            showStatus('資料過濾完成，正在發送到 webhook...', 'processing');
 
             // 3-4. 發送 JSON 數據到 webhook
             const webhookResponse = await chrome.runtime.sendMessage({
                 action: 'sendWebhook',
-                data: captureResponse.data
+                data: filteredData
             });
 
             if (webhookResponse.success) {
-                showStatus(`成功發送 ${captureResponse.data.totalRows} 筆資料！`, 'success');
+                showStatus(`成功發送 ${filteredRows.length} 筆資料！`, 'success');
             } else {
                 showStatus(webhookResponse.message || '發送失敗', 'error');
             }

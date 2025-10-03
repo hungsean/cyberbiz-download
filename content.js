@@ -396,7 +396,8 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
                 headers: headers,
                 rows: rows,
                 totalRows: rows.length,
-                capturedAt: new Date().toISOString()
+                capturedAt: new Date().toISOString(),
+                url: window.location.href
             };
 
             console.log('表格數據抓取成功:', tableData);
