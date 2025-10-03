@@ -121,9 +121,17 @@ chrome.webNavigation.onCompleted.addListener((details) => {
 async function waitForPageReady(tabId, maxRetries = 10) {
     for (let i = 0; i < maxRetries; i++) {
         try {
-            const response = await chrome.tabs.sendMessage(tabId, {action: 'validatePage'});
-            if (response && response.pageReady) {
+            // 先檢查頁面是否有必要元素（針對 downloadData 的情況）
+            const validateResponse = await chrome.tabs.sendMessage(tabId, {action: 'validatePage'});
+            if (validateResponse && validateResponse.pageReady) {
                 console.log(`頁面準備完成 (嘗試 ${i + 1}/${maxRetries})`);
+                return true;
+            }
+
+            // 如果沒有 validatePage 回應，嘗試等待 loading（針對 captureTraffic 的情況）
+            const loadingResponse = await chrome.tabs.sendMessage(tabId, {action: 'waitForLoading'});
+            if (loadingResponse && loadingResponse.success) {
+                console.log(`Loading 等待完成 (嘗試 ${i + 1}/${maxRetries})`);
                 return true;
             }
         } catch (error) {

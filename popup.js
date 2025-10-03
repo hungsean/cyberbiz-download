@@ -295,10 +295,55 @@ document.addEventListener('DOMContentLoaded', function() {
             // 3-1. 確認目前 URL 是否正確
             const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
             const currentUrl = new URL(tab.url);
-            const targetPath = '/admin/business_intelligence/overview'; // 待手動設定的正確路徑
+            const targetPath = '/admin/business_intelligence/overview';
 
+            // 如果路徑不對，導航到正確頁面
             if (currentUrl.pathname !== targetPath) {
-                showStatus('請先導航到正確的頁面', 'error');
+                console.log('路徑不匹配，當前路徑:', currentUrl.pathname, '目標路徑:', targetPath);
+                showStatus('跳轉到正確頁面...', 'processing');
+
+                // 透過 background script 跳轉到目標路徑，並設定待執行任務
+                const targetUrl = `${currentUrl.origin}${targetPath}`;
+                const lastMonth = getLastMonth();
+                const pendingTask = {
+                    action: 'captureTraffic',
+                    period: lastMonth.displayName,
+                    year: lastMonth.year,
+                    month: lastMonth.month
+                };
+
+                const response = await chrome.runtime.sendMessage({
+                    action: 'navigateToPage',
+                    targetUrl: targetUrl,
+                    pendingTask: pendingTask
+                });
+
+                if (response.success) {
+                    showStatus('頁面切換完成，正在等待頁面載入...', 'processing');
+
+                    // 等待頁面準備完成
+                    const readyResponse = await chrome.runtime.sendMessage({
+                        action: 'waitForPageReady',
+                        maxRetries: 15
+                    });
+
+                    if (readyResponse.success) {
+                        showStatus('自動執行完成！', 'success');
+                    } else {
+                        showStatus('頁面載入超時，請手動執行', 'error');
+                    }
+                }
+                return; // 跳轉情況下，不繼續執行下面的程式碼
+            }
+
+            // 路徑正確，先確認是否在 loading 畫面
+            console.log('路徑正確，檢查 loading 狀態');
+            const loadingCheckResponse = await chrome.tabs.sendMessage(tab.id, {
+                action: 'waitForLoading'
+            });
+
+            if (!loadingCheckResponse.success) {
+                showStatus('等待載入失敗', 'error');
                 return;
             }
 

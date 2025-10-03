@@ -205,6 +205,29 @@ function waitForLoadingToDisappear(timeout = 30000) {
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     console.log('內容腳本收到訊息:', request);
 
+    // 處理等待 loading 的請求
+    if (request.action === 'waitForLoading') {
+        console.log('檢查並等待 loading 消失');
+
+        (async () => {
+            try {
+                await waitForLoadingToDisappear();
+                sendResponse({
+                    success: true,
+                    message: 'Loading 已消失或不存在'
+                });
+            } catch (error) {
+                console.error('等待 loading 時發生錯誤:', error);
+                sendResponse({
+                    success: false,
+                    message: `等待失敗: ${error.message}`
+                });
+            }
+        })();
+
+        return true; // 保持訊息通道開啟以進行非同步回應
+    }
+
     if (request.action === 'downloadData') {
         console.log('在頁面中執行資料下載:', request.period);
 
@@ -334,6 +357,138 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
                 sendResponse({
                     success: false,
                     message: `設定日期失敗: ${error.message}`
+                });
+            }
+        })();
+
+        return true; // 保持訊息通道開啟以進行非同步回應
+    }
+
+    // 處理截取流量完整流程請求
+    if (request.action === 'captureTraffic') {
+        console.log('執行截取流量完整流程:', request.period);
+
+        (async () => {
+            try {
+                // 1. 等待 loading 消失
+                console.log('等待 loading 消失...');
+                await waitForLoadingToDisappear();
+
+                // 2. 設定日期範圍
+                const dateInputs = document.querySelectorAll('.DateInput_input_1');
+
+                if (dateInputs.length < 2) {
+                    sendResponse({
+                        success: false,
+                        message: `找不到足夠的日期輸入框（找到 ${dateInputs.length} 個，需要 2 個）`
+                    });
+                    return;
+                }
+
+                // 計算日期範圍
+                const firstDay = `${request.year}-${request.month.toString().padStart(2, '0')}-01`;
+                const lastDay = new Date(request.year, request.month, 0);
+                const lastDayStr = `${request.year}-${request.month.toString().padStart(2, '0')}-${lastDay.getDate().toString().padStart(2, '0')}`;
+
+                // 設定開始和結束日期
+                const startInput = dateInputs[0];
+                const endInput = dateInputs[1];
+
+                startInput.focus();
+                startInput.value = firstDay;
+                startInput.dispatchEvent(new Event('change', { bubbles: true }));
+                startInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+                endInput.focus();
+                endInput.value = lastDayStr;
+                endInput.dispatchEvent(new Event('change', { bubbles: true }));
+                endInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+                console.log(`日期範圍已設定: ${firstDay} 到 ${lastDayStr}`);
+
+                // 3. 等待資料載入
+                await waitForLoadingToDisappear();
+
+                // 4. 抓取表格數據
+                const tableContainer = document.querySelector('.pitaya-table-2');
+                if (!tableContainer) {
+                    sendResponse({
+                        success: false,
+                        message: '找不到 .pitaya-table-2 容器'
+                    });
+                    return;
+                }
+
+                const table = tableContainer.querySelector('table');
+                if (!table) {
+                    sendResponse({
+                        success: false,
+                        message: '在 .pitaya-table-2 中找不到 table 元素'
+                    });
+                    return;
+                }
+
+                // 解析表格
+                const headers = [];
+                const rows = [];
+
+                const headerCells = table.querySelectorAll('thead th');
+                headerCells.forEach(cell => {
+                    headers.push(cell.textContent.trim());
+                });
+
+                const bodyRows = table.querySelectorAll('tbody tr');
+                bodyRows.forEach(row => {
+                    const rowData = {};
+                    const cells = row.querySelectorAll('td');
+                    cells.forEach((cell, index) => {
+                        if (index < headers.length) {
+                            rowData[headers[index]] = cell.textContent.trim();
+                        }
+                    });
+                    rows.push(rowData);
+                });
+
+                // 5. 過濾資料
+                const filteredRows = rows.filter(row => {
+                    const rowDate = row['日期'];
+                    if (!rowDate) return false;
+                    return rowDate >= firstDay && rowDate <= lastDayStr;
+                });
+
+                const tableData = {
+                    headers: headers,
+                    rows: filteredRows,
+                    totalRows: filteredRows.length,
+                    originalTotalRows: rows.length,
+                    dateRange: { startDate: firstDay, endDate: lastDayStr },
+                    capturedAt: new Date().toISOString(),
+                    url: window.location.href
+                };
+
+                // 6. 發送到 webhook
+                const webhookResponse = await chrome.runtime.sendMessage({
+                    action: 'sendWebhook',
+                    data: tableData
+                });
+
+                if (webhookResponse.success) {
+                    sendResponse({
+                        success: true,
+                        message: `成功截取並發送 ${filteredRows.length} 筆資料`
+                    });
+                } else {
+                    sendResponse({
+                        success: false,
+                        message: webhookResponse.message || '發送 webhook 失敗'
+                    });
+                }
+
+            } catch (error) {
+                console.error('截取流量時發生錯誤:', error);
+                sendResponse({
+                    success: false,
+                    message: `執行失敗: ${error.message}`
                 });
             }
         })();
