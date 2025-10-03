@@ -312,20 +312,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            console.log('日期設定成功:', dateResponse.dateRange);
-            showStatus('資料載入完成，正在發送測試訊息...', 'processing');
+            console.log('日期設定成功:', dateResponse);
+            showStatus('資料載入完成，正在抓取表格數據...', 'processing');
 
-            // 3-3. 保留測試用的發送 webhook 請求
+            // 3-3. 抓取表格數據
+            const captureResponse = await chrome.tabs.sendMessage(tab.id, {
+                action: 'captureTableData'
+            });
+
+            if (!captureResponse.success) {
+                showStatus('抓取數據失敗：' + captureResponse.message, 'error');
+                return;
+            }
+
+            console.log('抓取到的數據:', captureResponse.data);
+            showStatus('數據抓取成功，正在發送到 webhook...', 'processing');
+
+            // 3-4. 發送 JSON 數據到 webhook
             const webhookResponse = await chrome.runtime.sendMessage({
                 action: 'sendWebhook',
-                data: {
-                    message: 'hello world',
-                    timestamp: new Date().toISOString()
-                }
+                data: captureResponse.data
             });
 
             if (webhookResponse.success) {
-                showStatus('測試訊息發送成功！', 'success');
+                showStatus(`成功發送 ${captureResponse.data.totalRows} 筆資料！`, 'success');
             } else {
                 showStatus(webhookResponse.message || '發送失敗', 'error');
             }

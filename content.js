@@ -340,4 +340,79 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
         return true; // 保持訊息通道開啟以進行非同步回應
     }
+
+    // 處理抓取網站數據請求
+    if (request.action === 'captureTableData') {
+        console.log('開始抓取表格數據');
+
+        try {
+            // 尋找 div.pitaya-table-2 下的 table
+            const tableContainer = document.querySelector('.pitaya-table-2');
+
+            if (!tableContainer) {
+                sendResponse({
+                    success: false,
+                    message: '找不到 .pitaya-table-2 容器'
+                });
+                return;
+            }
+
+            const table = tableContainer.querySelector('table');
+
+            if (!table) {
+                sendResponse({
+                    success: false,
+                    message: '在 .pitaya-table-2 中找不到 table 元素'
+                });
+                return;
+            }
+
+            // 解析表格為 JSON
+            const headers = [];
+            const rows = [];
+
+            // 取得表頭
+            const headerCells = table.querySelectorAll('thead th');
+            headerCells.forEach(cell => {
+                headers.push(cell.textContent.trim());
+            });
+
+            // 取得資料列
+            const bodyRows = table.querySelectorAll('tbody tr');
+            bodyRows.forEach(row => {
+                const rowData = {};
+                const cells = row.querySelectorAll('td');
+
+                cells.forEach((cell, index) => {
+                    if (index < headers.length) {
+                        rowData[headers[index]] = cell.textContent.trim();
+                    }
+                });
+
+                rows.push(rowData);
+            });
+
+            const tableData = {
+                headers: headers,
+                rows: rows,
+                totalRows: rows.length,
+                capturedAt: new Date().toISOString()
+            };
+
+            console.log('表格數據抓取成功:', tableData);
+
+            sendResponse({
+                success: true,
+                data: tableData,
+                message: `成功抓取 ${rows.length} 筆資料`
+            });
+
+        } catch (error) {
+            console.error('抓取表格數據時發生錯誤:', error);
+            sendResponse({
+                success: false,
+                message: `抓取失敗: ${error.message}`
+            });
+        }
+    }
 });
