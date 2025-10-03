@@ -219,4 +219,30 @@ document.addEventListener('DOMContentLoaded', function() {
             showStatus('Webhook URL 已保存！', 'success');
         });
     });
+
+    // 截取流量按鈕
+    const captureTrafficBtn = document.getElementById('captureTrafficBtn');
+    captureTrafficBtn.addEventListener('click', async () => {
+        console.log('點擊截取流量按鈕');
+        showStatus('正在發送測試訊息...', 'processing');
+
+        try {
+            const response = await chrome.runtime.sendMessage({
+                action: 'sendWebhook',
+                data: {
+                    message: 'hello world',
+                    timestamp: new Date().toISOString()
+                }
+            });
+
+            if (response.success) {
+                showStatus('測試訊息發送成功！', 'success');
+            } else {
+                showStatus(response.message || '發送失敗', 'error');
+            }
+        } catch (error) {
+            console.error('發送 webhook 錯誤:', error);
+            showStatus('發送失敗，請重試', 'error');
+        }
+    });
 });
