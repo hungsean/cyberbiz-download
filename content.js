@@ -243,4 +243,53 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         const validation = validateDatePickers();
         sendResponse(validation);
     }
+
+    // 處理設定日期範圍請求（用於截取流量功能）
+    if (request.action === 'setDateRange') {
+        console.log('設定日期範圍:', request.startDate, '到', request.endDate);
+
+        try {
+            // 尋找 class="DateInput_input_1" 的輸入框
+            const dateInputs = document.querySelectorAll('.DateInput_input_1');
+
+            if (dateInputs.length < 2) {
+                sendResponse({
+                    success: false,
+                    message: `找不到足夠的日期輸入框（找到 ${dateInputs.length} 個，需要 2 個）`
+                });
+                return;
+            }
+
+            // 第一個是開始時間，第二個是結束時間
+            const startInput = dateInputs[0];
+            const endInput = dateInputs[1];
+
+            // 設定值
+            startInput.value = request.startDate;
+            endInput.value = request.endDate;
+
+            // 觸發事件以確保頁面識別到變更
+            [startInput, endInput].forEach(input => {
+                const changeEvent = new Event('change', { bubbles: true });
+                const inputEvent = new Event('input', { bubbles: true });
+                input.dispatchEvent(changeEvent);
+                input.dispatchEvent(inputEvent);
+            });
+
+            console.log(`日期範圍已設定: ${request.startDate} 到 ${request.endDate}`);
+
+            sendResponse({
+                success: true,
+                message: '日期範圍設定成功',
+                startDate: request.startDate,
+                endDate: request.endDate
+            });
+        } catch (error) {
+            console.error('設定日期範圍時發生錯誤:', error);
+            sendResponse({
+                success: false,
+                message: `設定日期失敗: ${error.message}`
+            });
+        }
+    }
 });

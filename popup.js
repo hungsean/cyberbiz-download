@@ -220,14 +220,101 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // 1. 函數：輸入年份和月份，輸出該月的開始和結束日期（yyyy-mm-dd格式）
+    function getMonthDateRange(year, month) {
+        // 該月的第一天
+        const firstDay = `${year}-${month.toString().padStart(2, '0')}-01`;
+
+        // 該月的最後一天：下個月的第0天 = 這個月的最後一天
+        const lastDay = new Date(year, month, 0);
+        const lastDayStr = `${year}-${month.toString().padStart(2, '0')}-${lastDay.getDate().toString().padStart(2, '0')}`;
+
+        return {
+            startDate: firstDay,
+            endDate: lastDayStr
+        };
+    }
+
+    // 2. 函數：設定日期範圍到頁面上的輸入框
+    async function setDateRangeOnPage(year, month) {
+        try {
+            const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+            const dateRange = getMonthDateRange(year, month);
+
+            try {
+                // 透過 content script 設定日期
+                const response = await chrome.tabs.sendMessage(tab.id, {
+                    action: 'setDateRange',
+                    startDate: dateRange.startDate,
+                    endDate: dateRange.endDate
+                });
+
+                return response;
+            } catch (error) {
+                // 如果連接失敗，嘗試注入 content script
+                if (error.message.includes('Could not establish connection')) {
+                    console.log('Content script 未載入，嘗試注入...');
+
+                    try {
+                        await chrome.scripting.executeScript({
+                            target: { tabId: tab.id },
+                            files: ['content.js']
+                        });
+
+                        // 等待一下讓 content script 初始化
+                        await new Promise(resolve => setTimeout(resolve, 500));
+
+                        // 重新嘗試發送訊息
+                        const response = await chrome.tabs.sendMessage(tab.id, {
+                            action: 'setDateRange',
+                            startDate: dateRange.startDate,
+                            endDate: dateRange.endDate
+                        });
+
+                        return response;
+                    } catch (injectError) {
+                        console.error('注入 content script 失敗:', injectError);
+                        throw new Error('無法載入必要的腳本，請重新整理頁面後再試');
+                    }
+                }
+                throw error;
+            }
+        } catch (error) {
+            console.error('設定日期範圍錯誤:', error);
+            throw error;
+        }
+    }
+
     // 截取流量按鈕
     const captureTrafficBtn = document.getElementById('captureTrafficBtn');
     captureTrafficBtn.addEventListener('click', async () => {
         console.log('點擊截取流量按鈕');
-        showStatus('正在發送測試訊息...', 'processing');
 
         try {
-            const response = await chrome.runtime.sendMessage({
+            // 3-1. 確認目前 URL 是否正確
+            const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+            const currentUrl = new URL(tab.url);
+            const targetPath = '/admin/business_intelligence/overview'; // 待手動設定的正確路徑
+
+            if (currentUrl.pathname !== targetPath) {
+                showStatus('請先導航到正確的頁面', 'error');
+                return;
+            }
+
+            // 3-2. 設定日期（使用上個月）
+            showStatus('正在設定日期範圍...', 'processing');
+            const lastMonth = getLastMonth();
+            const dateResponse = await setDateRangeOnPage(lastMonth.year, lastMonth.month);
+
+            if (!dateResponse.success) {
+                showStatus('設定日期失敗：' + dateResponse.message, 'error');
+                return;
+            }
+
+            showStatus('日期設定完成，正在發送測試訊息...', 'processing');
+
+            // 3-3. 保留測試用的發送 webhook 請求
+            const webhookResponse = await chrome.runtime.sendMessage({
                 action: 'sendWebhook',
                 data: {
                     message: 'hello world',
@@ -235,14 +322,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            if (response.success) {
+            if (webhookResponse.success) {
                 showStatus('測試訊息發送成功！', 'success');
             } else {
-                showStatus(response.message || '發送失敗', 'error');
+                showStatus(webhookResponse.message || '發送失敗', 'error');
             }
         } catch (error) {
-            console.error('發送 webhook 錯誤:', error);
-            showStatus('發送失敗，請重試', 'error');
+            console.error('執行錯誤:', error);
+            showStatus('執行失敗，請重試', 'error');
         }
     });
 });
