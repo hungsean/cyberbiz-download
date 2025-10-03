@@ -292,118 +292,26 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('點擊截取流量按鈕');
 
         try {
-            // 3-1. 確認目前 URL 是否正確
-            const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-            const currentUrl = new URL(tab.url);
-            const targetPath = '/admin/business_intelligence/overview';
-
-            // 如果路徑不對，導航到正確頁面
-            if (currentUrl.pathname !== targetPath) {
-                console.log('路徑不匹配，當前路徑:', currentUrl.pathname, '目標路徑:', targetPath);
-                showStatus('跳轉到正確頁面...', 'processing');
-
-                // 透過 background script 跳轉到目標路徑，並設定待執行任務
-                const targetUrl = `${currentUrl.origin}${targetPath}`;
-                const lastMonth = getLastMonth();
-                const pendingTask = {
-                    action: 'captureTraffic',
-                    period: lastMonth.displayName,
-                    year: lastMonth.year,
-                    month: lastMonth.month
-                };
-
-                const response = await chrome.runtime.sendMessage({
-                    action: 'navigateToPage',
-                    targetUrl: targetUrl,
-                    pendingTask: pendingTask
-                });
-
-                if (response.success) {
-                    showStatus('頁面切換完成，正在等待頁面載入...', 'processing');
-
-                    // 等待頁面準備完成
-                    const readyResponse = await chrome.runtime.sendMessage({
-                        action: 'waitForPageReady',
-                        maxRetries: 15
-                    });
-
-                    if (readyResponse.success) {
-                        showStatus('自動執行完成！', 'success');
-                    } else {
-                        showStatus('頁面載入超時，請手動執行', 'error');
-                    }
-                }
-                return; // 跳轉情況下，不繼續執行下面的程式碼
-            }
-
-            // 路徑正確，先確認是否在 loading 畫面
-            console.log('路徑正確，檢查 loading 狀態');
-            const loadingCheckResponse = await chrome.tabs.sendMessage(tab.id, {
-                action: 'waitForLoading'
-            });
-
-            if (!loadingCheckResponse.success) {
-                showStatus('等待載入失敗', 'error');
-                return;
-            }
-
-            // 3-2. 設定日期（使用上個月）
-            showStatus('正在設定日期範圍...', 'processing');
+            // 初始化上個月的開始和結束日期
             const lastMonth = getLastMonth();
-            const dateResponse = await setDateRangeOnPage(lastMonth.year, lastMonth.month);
+            const startDate = `${lastMonth.year}-${lastMonth.monthStr}-01`;
+            const lastDay = new Date(lastMonth.year, lastMonth.month, 0).getDate();
+            const endDate = `${lastMonth.year}-${lastMonth.monthStr}-${lastDay.toString().padStart(2, '0')}`;
 
-            if (!dateResponse.success) {
-                showStatus('設定日期失敗：' + dateResponse.message, 'error');
-                return;
-            }
+            showStatus('正在處理...', 'processing');
 
-            console.log('日期設定成功:', dateResponse);
-            showStatus('資料載入完成，正在抓取表格數據...', 'processing');
-
-            // 3-3. 抓取表格數據
-            const captureResponse = await chrome.tabs.sendMessage(tab.id, {
-                action: 'captureTableData'
+            // 將所有邏輯交給 background.js 處理
+            const response = await chrome.runtime.sendMessage({
+                action: 'captureTrafficTask',
+                targetPath: '/admin/business_intelligence/overview',
+                startDate: startDate,
+                endDate: endDate
             });
 
-            if (!captureResponse.success) {
-                showStatus('抓取數據失敗：' + captureResponse.message, 'error');
-                return;
-            }
-
-            console.log('抓取到的數據:', captureResponse.data);
-            showStatus('數據抓取成功，正在過濾資料...', 'processing');
-
-            // 3-3.5. 過濾資料：只保留在當前月份範圍內的資料
-            const dateRange = getMonthDateRange(lastMonth.year, lastMonth.month);
-            const filteredRows = captureResponse.data.rows.filter(row => {
-                const rowDate = row['日期']; // 假設欄位名稱為「日期」
-                if (!rowDate) return false;
-
-                // 將日期字串轉為可比較的格式 (假設格式為 yyyy-mm-dd 或類似)
-                return rowDate >= dateRange.startDate && rowDate <= dateRange.endDate;
-            });
-
-            const filteredData = {
-                ...captureResponse.data,
-                rows: filteredRows,
-                totalRows: filteredRows.length,
-                originalTotalRows: captureResponse.data.totalRows,
-                dateRange: dateRange
-            };
-
-            console.log(`過濾完成：原始 ${captureResponse.data.totalRows} 筆，過濾後 ${filteredRows.length} 筆`);
-            showStatus('資料過濾完成，正在發送到 webhook...', 'processing');
-
-            // 3-4. 發送 JSON 數據到 webhook
-            const webhookResponse = await chrome.runtime.sendMessage({
-                action: 'sendWebhook',
-                data: filteredData
-            });
-
-            if (webhookResponse.success) {
-                showStatus(`成功發送 ${filteredRows.length} 筆資料！`, 'success');
+            if (response.success) {
+                showStatus(`成功發送 ${response.totalRows} 筆資料！`, 'success');
             } else {
-                showStatus(webhookResponse.message || '發送失敗', 'error');
+                showStatus(response.message || '執行失敗', 'error');
             }
         } catch (error) {
             console.error('執行錯誤:', error);
