@@ -297,13 +297,13 @@ async function executeOrderExport(tabId, startDate, endDate) {
     try {
         console.log('開始執行訂單匯出流程');
 
-        // 1. 等待 loading
-        console.log('步驟 1: 等待 loading 消失');
-        const loadingResponse1 = await chrome.tabs.sendMessage(tabId, {
-            action: 'waitForLoading'
+        // 1. 點擊 move-all-to-right 按鈕
+        console.log('步驟 1: 點擊 move-all-to-right 按鈕');
+        const moveResponse = await chrome.tabs.sendMessage(tabId, {
+            action: 'clickMoveAllToRight'
         });
-        if (!loadingResponse1.success) {
-            return {success: false, message: '等待 loading 失敗'};
+        if (!moveResponse.success) {
+            return {success: false, message: `點擊 move-all-to-right 按鈕失敗: ${moveResponse.message}`};
         }
 
         // 2. 設定日期範圍

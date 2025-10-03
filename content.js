@@ -110,6 +110,33 @@ function clickAgreeButton() {
     }
 }
 
+// 點擊 move-all-to-right 按鈕的函數
+function clickMoveAllToRightButton() {
+    try {
+        const moveButton = document.getElementById('move-all-to-right');
+
+        if (!moveButton) {
+            throw new Error('找不到 move-all-to-right 按鈕');
+        }
+
+        // 模擬點擊事件
+        moveButton.click();
+
+        console.log('已點擊 move-all-to-right 按鈕');
+
+        return {
+            success: true,
+            message: '成功點擊 move-all-to-right 按鈕'
+        };
+    } catch (error) {
+        console.error('點擊 move-all-to-right 按鈕時發生錯誤:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
 // 設定日期範圍的主要函數
 function setDateRange(year, month) {
     try {
@@ -305,6 +332,16 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         sendResponse({
             success: agreeResult.success,
             message: agreeResult.success ? agreeResult.message : `點擊失敗: ${agreeResult.error}`
+        });
+    }
+
+    // 點擊 move-all-to-right 按鈕
+    if (request.action === 'clickMoveAllToRight') {
+        console.log('執行點擊 move-all-to-right 按鈕');
+        const moveResult = clickMoveAllToRightButton();
+        sendResponse({
+            success: moveResult.success,
+            message: moveResult.success ? moveResult.message : `點擊失敗: ${moveResult.error}`
         });
     }
 
