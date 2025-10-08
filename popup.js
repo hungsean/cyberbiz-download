@@ -145,4 +145,28 @@ document.addEventListener('DOMContentLoaded', function() {
             showStatus('執行失敗，請重試', 'error');
         }
     });
+
+    // 直接發送流量按鈕
+    const captureAndSendBtn = document.getElementById('captureAndSendBtn');
+    captureAndSendBtn.addEventListener('click', async () => {
+        console.log('點擊直接發送流量按鈕');
+
+        try {
+            showStatus('正在處理...', 'processing');
+
+            // 將所有邏輯交給 background.js 處理
+            const response = await chrome.runtime.sendMessage({
+                action: 'captureAndSendTask'
+            });
+
+            if (response.success) {
+                showStatus(`成功發送 ${response.totalRows} 筆資料！`, 'success');
+            } else {
+                showStatus(response.message || '執行失敗', 'error');
+            }
+        } catch (error) {
+            console.error('執行錯誤:', error);
+            showStatus('執行失敗，請重試', 'error');
+        }
+    });
 });

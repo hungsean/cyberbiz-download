@@ -128,6 +128,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true; // 保持訊息通道開啟以進行非同步回應
     }
 
+    // 直接發送流量任務 (簡化版)
+    if (request.action === 'captureAndSendTask') {
+        console.log('收到直接發送流量任務');
+
+        chrome.tabs.query({active: true, currentWindow: true}, async (tabs) => {
+            const tab = tabs[0];
+
+            try {
+                // 直接執行簡化的截取流量流程
+                const result = await executeCaptureAndSend(tab.id);
+                sendResponse(result);
+            } catch (error) {
+                console.error('直接發送流量任務執行錯誤:', error);
+                sendResponse({success: false, message: `執行失敗: ${error.message}`});
+            }
+        });
+
+        return true; // 保持訊息通道開啟以進行非同步回應
+    }
+
     // 訂單匯出任務的統一處理
     if (request.action === 'orderExportTask') {
         console.log('收到訂單匯出任務:', request);
@@ -465,6 +485,128 @@ async function waitForPageReady(tabId, maxRetries = 10) {
 
     console.log(`頁面準備檢查超時 (${maxRetries} 次嘗試)`);
     return false;
+}
+
+// 執行直接發送流量的簡化流程
+async function executeCaptureAndSend(tabId) {
+    try {
+        console.log('開始執行直接發送流量流程');
+
+        // 1. 等待 loading (如果有的話)
+        console.log('步驟 1: 等待 loading 消失');
+        try {
+            await chrome.tabs.sendMessage(tabId, {
+                action: 'waitForLoading'
+            });
+        } catch (error) {
+            console.log('沒有 loading 或已消失，繼續執行');
+        }
+
+        // 2. 直接抓取表格數據
+        console.log('步驟 2: 抓取表格數據');
+        const captureResponse = await chrome.tabs.sendMessage(tabId, {
+            action: 'captureTableData'
+        });
+        if (!captureResponse.success) {
+            return {success: false, message: `抓取數據失敗: ${captureResponse.message}`};
+        }
+
+        // 3. 檢查資料是否都是同一個月
+        console.log('步驟 3: 檢查資料是否都是同一個月');
+        const allRows = captureResponse.data.rows;
+
+        if (allRows.length === 0) {
+            return {success: false, message: '沒有資料可發送'};
+        }
+
+        // 取得第一筆資料的年月
+        const firstDate = allRows[0]['日期'];
+        if (!firstDate) {
+            return {success: false, message: '資料格式錯誤：找不到日期欄位'};
+        }
+
+        const [year, month] = firstDate.split('-').slice(0, 2);
+        const targetYearMonth = `${year}-${month}`;
+
+        // 過濾出同一個月的資料
+        const filteredRows = allRows.filter(row => {
+            const rowDate = row['日期'];
+            if (!rowDate) return false;
+            return rowDate.startsWith(targetYearMonth);
+        });
+
+        console.log(`資料檢查完成：原始 ${allRows.length} 筆，同月份 ${filteredRows.length} 筆 (${targetYearMonth})`);
+
+        // 如果過濾後沒有資料，表示資料不統一
+        if (filteredRows.length === 0) {
+            return {success: false, message: '資料月份不一致，無法發送'};
+        }
+
+        // 準備發送的數據
+        const dataToSend = {
+            ...captureResponse.data,
+            rows: filteredRows,
+            totalRows: filteredRows.length,
+            originalTotalRows: allRows.length,
+            yearMonth: targetYearMonth
+        };
+
+        // 4. 發送 webhook
+        console.log('步驟 4: 發送 webhook');
+        const webhookResponse = await sendWebhook(dataToSend);
+        if (!webhookResponse.success) {
+            return {success: false, message: `發送 webhook 失敗: ${webhookResponse.message}`};
+        }
+
+        console.log('直接發送流量流程完成');
+
+        // 儲存結果到 storage，供 popup 顯示
+        const result = {
+            success: true,
+            totalRows: filteredRows.length,
+            originalRows: allRows.length,
+            yearMonth: targetYearMonth,
+            message: `成功發送 ${filteredRows.length} 筆資料！(${targetYearMonth})`,
+            messageType: 'success',
+            details: `原始資料: ${allRows.length} 筆\n同月份資料: ${filteredRows.length} 筆\n月份: ${targetYearMonth}`,
+            timestamp: new Date().toISOString()
+        };
+
+        await chrome.storage.local.set({ lastTaskResult: result });
+
+        // 嘗試打開 popup 顯示結果
+        try {
+            await chrome.action.openPopup();
+            console.log('Popup 已打開');
+        } catch (error) {
+            console.log('無法打開 popup:', error.message);
+        }
+
+        return result;
+
+    } catch (error) {
+        console.error('執行直接發送流量流程時發生錯誤:', error);
+
+        // 儲存錯誤結果
+        const errorResult = {
+            success: false,
+            message: `執行失敗: ${error.message}`,
+            messageType: 'error',
+            details: error.stack || error.message,
+            timestamp: new Date().toISOString()
+        };
+
+        await chrome.storage.local.set({ lastTaskResult: errorResult });
+
+        // 嘗試打開 popup 顯示錯誤
+        try {
+            await chrome.action.openPopup();
+        } catch (openError) {
+            console.log('無法打開 popup:', openError.message);
+        }
+
+        return errorResult;
+    }
 }
 
 chrome.action.onClicked.addListener((tab) => {
